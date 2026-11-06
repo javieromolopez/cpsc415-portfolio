@@ -16,6 +16,11 @@ java -cp ".;lib/*" Eval
 java -cp ".;lib/*" Main
 # lint
 N/A
+
+# voice/ (Python, Week 7)
+pip install -r requirements.txt pytest ruff
+python -m pytest voice/tests -v      # no-key tests run free; billed tests skip without a key
+ruff check voice
 ```
 
 ## Conventions
@@ -28,9 +33,17 @@ N/A
 For an introductory lab, follow its explicitly assigned stages; the full chain below applies to major projects. Week 1 uses its own minimal repository.
 
 - Write or update `intent/` and `spec.md` before code. Get `plan.md` approved before implementing.
-- One feature per branch and pull request. Never push to `main` directly.
+- One feature per branch and pull request. Never push to `main` directly, except where a lab says to commit to main (Week 7).
 - Never commit `.env` or `.claude/settings.local.json`.
-- This is the Portfolio intent-spec milestone. Stages assigned: intent and spec. No plan.md, no code, and no deployment yet.
+- Week 7: the spoken interface lives in voice/. Stages assigned: intent, spec,
+  plan, tests. Commit to main. The Java chatbot does not exist yet, so voice/
+  is Python and uses the course example's profile and answer step until the
+  Java chatbot replaces it (before November 30).
+- Transcription and speech calls are billed. One transcription per clip, one
+  speech call per answer, never a model call inside a loop of tests. Fixture
+  clips are WAV; expected.json is written by a person before the model hears it.
+- The spoken answer is the chatbot's answer: the refuse-to-fabricate rule
+  applies to what is said aloud exactly as to what is typed.
 
 ## Common mistakes
 - Do not write code before approval.
