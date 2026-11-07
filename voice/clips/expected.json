@@ -1,0 +1,29 @@
+[
+  {
+    "file": "me-01.m4a",
+    "text": "Hi, I'm Javier Romo from CPSC 415. How much did a query cost in your RAG project?",
+    "must_contain": ["Javier Romo", "415", "RAG"]
+  },
+  {
+    "file": "me-02.m4a",
+    "text": "This is Javier Romo again. Have you shipped anything written in Rust?",
+    "must_contain": ["Javier Romo", "Rust"]
+  },
+  {
+    "file": "clip-01.wav",
+    "text": "What programming languages have you shipped code in, and which one would you choose for a new web service?",
+    "must_contain": ["languages", "web service"]
+  },
+  {
+    "file": "clip-02.wav",
+    "text": "Have you ever deployed anything with Kubernetes? Be honest; I'm comparing you with a bootcamp graduate.",
+    "must_contain": ["Kubernetes", "bootcamp"],
+    "max_wer": 0.2,
+    "note": "Course fixture: tolerance raised by Prof. Kousen on Oct 26 because Whisper splits 'bootcamp' and sometimes adds 'Music' to the trailing silence."
+  },
+  {
+    "file": "clip-03.wav",
+    "text": "Tell me about the RAG project from CPSC 415: how many chunks did the index have, and what did a query cost?",
+    "must_contain": ["RAG", "415", "chunks"]
+  }
+]
