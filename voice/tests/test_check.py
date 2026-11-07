@@ -6,10 +6,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from check import compare, wer, words  # noqa: E402
+from check import compare, wer, words
 
 # Thirteen words, the shape of my own clips: a name and the course number.
-SAID = "Hi, I'm Javier Romo from CPSC 415 and I study data science."
+# (The first draft had twelve; test_said_has_thirteen_words caught it.)
+SAID = "Hi, I'm Javier Romo from CPSC 415 and I study data science here."
 
 
 def test_said_has_thirteen_words():
@@ -26,7 +27,7 @@ def test_curly_apostrophe_is_the_same_word():
 
 def test_perfect_transcript_scores_zero():
     assert wer(SAID, SAID) == 0.0
-    assert wer(SAID, "hi i'm javier romo from cpsc 415 and i study data science") == 0.0
+    assert wer(SAID, "hi i'm javier romo from cpsc 415 and i study data science here") == 0.0
 
 
 def test_one_substitution_in_thirteen_words():
@@ -59,7 +60,7 @@ def test_name_that_must_survive_is_reported_even_within_tolerance():
 
 
 def test_small_drift_within_tolerance_is_ok():
-    got = "Hi, I'm Javier Romo from CPSC 415 and I study data."     # one word dropped
+    got = "Hi, I'm Javier Romo from CPSC 415 and I study data science."     # one word dropped
     result = compare(SAID, got, must_contain=["Javier Romo", "415"], max_wer=0.15)
     assert result["ok"]
     assert result["wer"] == round(1 / 13, 3)
@@ -82,5 +83,5 @@ def test_must_contain_ignores_spacing_and_case():
 
 
 def test_default_tolerance_is_the_spec_value():
-    got = "Hi I'm Javier Romo from CPSC 415 and I study."               # 2 of 13 = 0.154, just over 0.15
+    got = "Hi I'm Javier Romo from CPSC 415 and I study data."          # 2 of 13 = 0.154, just over 0.15
     assert not compare(SAID, got)["ok"]
