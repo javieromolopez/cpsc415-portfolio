@@ -145,3 +145,52 @@ Carried over from the intent, plus design-level exclusions:
 - Tool/function calling by the model (not needed; the profile is in the prompt).
 - HTTPS / TLS termination (handled at deploy, not in this spec).
 - Logging visitor messages to disk (analytics is out of scope; logs stay in memory and are not persisted).
+
+## Week 7: spoken interface
+
+Implements `intent/voice.md`. Lives in `voice/`. Until the Java chatbot exists, the answer step is the course voice-loop example's (`minimax/minimax-m3` grounded in the example's `profile.json`, a fictional student); `voice/CHECKS.md` says so. The Java chatbot's answer function replaces it before November 30.
+
+### Transcriber (`voice/transcribe.py`)
+- **What it does:** Sends one recording to OpenRouter's transcription endpoint (`POST /api/v1/audio/transcriptions`, audio as base64 in JSON) and returns the text, the audio seconds and cost from the reply's `usage`, and the wall-clock seconds. With `--set expected.json` it transcribes every clip once, runs the checker on each, and writes the results to a transcripts file.
+- **Language:** Python 3. **Why:** The Java chatbot is not built yet, the course example is Python, and the `openrouter` SDK exposes the endpoint as one call (`client.stt.create_transcription`). Alternative considered: Java with `java.net.http.HttpClient`, matching the rest of the spec. Rejected for this week, because it means porting the example and the browser check with no chatbot to attach them to. It can be revisited when `/api/voice` moves into the Java server.
+- **Model:** `openai/whisper-large-v3-turbo` (default). **Why:** The cheapest serious transcriber, priced per second of audio (about $0.00002 for a 6-second clip). **Comparison:** `elevenlabs/scribe-v2`, about 18 times the price, which read every course fixture exactly, including the one Whisper split ("boot camp"). Language: English, auto-detected (no `--language` hint).
+- **Interfaces:** `transcribe(client, audio: bytes, fmt: str, model, language=None) -> {text, model, audio_seconds, cost, seconds}`; `transcribe_file(client, path, ...)`; `transcribe_set(client, expected_path, model) -> list` (adds `file` and `check` to each result). CLI: `python transcribe.py --set clips/expected.json [--model M] [--out FILE]`.
+
+### Checker (`voice/check.py`)
+- **What it does:** Judges a transcript in plain code, with no model and no key: the word error rate against text a person wrote first, the required words that did not come through, and whether anything came back at all.
+- **Language:** Python. **Why:** It must be importable by the transcriber and the tests; no dependencies.
+- **Model:** None. The transcript must be checked by something other than the transcriber.
+- **Interfaces:** `words(text) -> list[str]`; `wer(expected, got) -> float`; `compare(expected, got, must_contain=None, max_wer=0.15) -> {ok, wer, missing, empty}`.
+
+### Speaker (`voice/speak.py`)
+- **What it does:** Sends the chatbot's text answer to the speech endpoint (`POST /api/v1/audio/speech`) and writes the audio: MP3, or WAV when the output name ends in `.wav` (it asks for PCM and writes the header itself). Returns characters, bytes, seconds, the generation id, and the cost. The cost comes from the generation record when it already exists, otherwise it is estimated as the catalog price per character times characters and marked as estimated.
+- **Language:** Python, for the same reason as the transcriber.
+- **Model:** `microsoft/mai-voice-2.1-flash` with the voice `en-US-Harper:MAI-Voice-2.1-Flash` (default). **Why:** Priced per character (about $0.000015 a character), answers in under a second, and writes MP3s that transcribers read completely. **Comparison:** the same model with the voice `en-IN-Priya:MAI-Voice-2.1-Flash`, to hear what a different locale does with "CPSC", "415" and "RAG" at the same price.
+- **Interfaces:** `speak(client, text, out: Path, model, voice) -> {file, model, voice, chars, bytes, seconds, generation_id, cost, cost_is_estimate}`. CLI: `python speak.py "TEXT" --out FILE [--model M] [--voice V]`.
+
+### Voice server and page (`voice/server.py`, `voice/index.html`)
+- **What it does:** `GET /` serves the page: a hold-to-record button, a file-picker fallback, the transcript, the answer, and an audio player. `POST /api/voice` takes the recording as the request body, with the format given by `Content-Type`. It transcribes the recording, calls the same `answer(question)` function as `POST /api/ask` (the typed path), speaks the reply, and returns JSON with the transcript, the answer, the audio as base64, the three costs, and the seconds per step.
+- **Language:** Python standard library `http.server` plus `openrouter`. **Why:** The example's server, so the mechanism stays visible; no framework. The Java `ChatServer` gets `/api/voice` when it exists.
+- **Model:** Chat: `minimax/minimax-m3`, the example's model, with `max_tokens=1500` so its hidden reasoning cannot use up the answer. My spec's `xiaomi/mimo-v2.6-flash` takes over with the Java chatbot.
+- **Interfaces:** `POST /api/voice` (audio body; 415 for an unknown type; a 10 MB cap); `POST /api/ask` (text body); `GET /`. Listens on `localhost:8000`. Reads `OPENROUTER_API_KEY` from the environment at startup.
+
+### Dependencies
+- `openrouter`: the OpenRouter Python SDK. **Why:** It carries the transcription (`stt`), speech (`tts`), chat, and generation-record calls on the same key, so `voice/` has no hand-written HTTP for the provider.
+- `pytest`: runs the no-key tests and the billed eval (the billed eval skips without a key).
+- `ruff`: the linter. Its findings are recorded in `CHECKS.md`.
+- `playwright`: the browser check that drives the page and asserts the key never reaches the browser.
+
+### Behavior (Week 7)
+8. **Word error rate is computed in code** against the text in `voice/clips/expected.json`, which I wrote before any model heard the clips. Edits per expected word; case, punctuation, and spacing ignored. Default tolerance **0.15**; a clip may raise its own `max_wer` only with a `note` explaining why.
+9. **Words that must survive are checked separately from the rate.** For my clips: "Javier Romo" and "415". A missing one fails the clip even when the rate is within tolerance. A number read back as words ("four fifteen") counts as missing.
+10. **An empty transcript is a failed transcript, not a crash.** The checker scores it 1.0 with `empty: true`; the server replies "I didn't catch that." and makes no chat or speech call.
+11. **A reply from the speech endpoint that is not audio is an error.** It is never saved as audio; the error is raised with the provider's message. In the server, a failed speech call still returns the transcript and the written answer, with `tts_error` set.
+12. **The spoken answer is the chatbot's answer:** at most three sentences, no lists, no markdown, no URLs, and the refuse-to-fabricate rule applies. Asked about Rust, it says Rust is "not yet"; it never claims experience the profile does not record.
+13. **The key stays on the server.** The browser sends only audio to `/api/voice`; no request from the page carries an `Authorization` header or goes to `openrouter.ai`; the page source contains no key. `test_browser.py` asserts these three things.
+14. **One transcription per clip, one speech call per answer.** The billed eval and the scripts never call a model inside a loop of tests; billed tests skip when `OPENROUTER_API_KEY` is unset.
+
+### Cost estimate (Week 7)
+- Transcription: about $0.00002–0.00003 per clip on Whisper, about $0.0003–0.0006 on Scribe.
+- Speech: about $0.000015 per character, so $0.003–0.005 for a two- or three-sentence answer.
+- One voice turn on the class models: about **$0.005** (measured $0.0035–0.0057 on the example), mostly the speech.
+- The whole lab: about $0.03. This per-turn number goes into the hosting decision before November 30.
