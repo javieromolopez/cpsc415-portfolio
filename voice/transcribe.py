@@ -16,8 +16,9 @@ import sys
 import time
 from pathlib import Path
 
-from check import DEFAULT_MAX_WER, compare
 from openrouter import OpenRouter
+
+from check import DEFAULT_MAX_WER, compare
 
 DEFAULT_MODEL = "openai/whisper-large-v3-turbo"     # priced per second of audio
 FORMATS = {".mp3": "mp3", ".wav": "wav", ".m4a": "m4a", ".webm": "webm", ".ogg": "ogg", ".flac": "flac", ".aac": "aac"}

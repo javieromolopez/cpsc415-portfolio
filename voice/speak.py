@@ -88,6 +88,7 @@ if __name__ == "__main__":
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         sys.exit("OPENROUTER_API_KEY is not set; nothing was billed.")
-    info = speak(OpenRouter(api_key=key), a.text, a.out, a.model, a.voice)
+    timeout_ms = int(os.environ.get("SPEECH_TIMEOUT_MS", "120000"))   # a slow speech provider timed out at the SDK default on Nov 6
+    info = speak(OpenRouter(api_key=key, timeout_ms=timeout_ms), a.text, a.out, a.model, a.voice)
     print(f"{info['file']}  {info['bytes']} bytes  {info['chars']} chars  {info['seconds']}s  "
           f"cost ${info['cost']}{' (estimated)' if info['cost_is_estimate'] else ''}  [{info['model']} / {info['voice']}]")

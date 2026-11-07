@@ -15,6 +15,7 @@
 - First run: 1 finding, `RUF100` (an unused `# noqa: E402` on the test's import). Removed.
 - Second run: all checks passed.
 - After adding `transcribe.py`, `speak.py`, and `tests/test_eval.py`: 1 finding, `I001` (import order in `transcribe.py`: ruff treats the local `check` module as third-party). Fixed with `ruff check --fix`; all checks passed.
+- Running ruff from inside `voice/` then flagged the same `I001` the other way round: from there, `check` looks first-party. Added `voice/ruff.toml` declaring `check`, `transcribe`, `speak`, and `server` as first-party. `ruff check voice` from the root and `ruff check .` from `voice/` now both pass.
 
 ## Transcription, per clip per model
 
@@ -51,9 +52,53 @@ November 6, 2026. One call per clip per model: `python transcribe.py --set clips
 
 Whisper is still not the safe choice, though. On the same clips it turned "RAG" into "Rack" and garbled "again". The second transcriber is what showed each one's errors: without Scribe I would have trusted "Rack", and without Whisper I would have trusted "Romu".
 
+**What I heard in my own clips:** I said "Javier" correctly, and I pronounce "RAG" as a word ("rag"), not as letters. That explains Whisper's "Rack": a real English word one sound away from what I said. Scribe wrote "RAG" because it recognized the term from the rest of the sentence. The checker cannot tell which of these happened; only listening can. If the deployed chatbot gets voice questions about RAG, the answer step should treat "rack project" as a likely mishearing, or the page should show the transcript so the visitor can see it was misheard.
+
+## Billed eval
+
+`python -m pytest voice/tests/test_eval.py -v -s` (Whisper, one call per clip, plus one speech call), November 6, 2026. It ran twice:
+- **Run 1 (by accident):** `pytest voice/tests` with the key set also runs the billed eval: 19 passed, 2 failed. I had cut the output to its last lines, so the details were lost.
+- **Run 2 (kept):** 6 passed, 1 failed, in 64.7 s. Cost about $0.0011: five transcriptions about $0.00022, one speech call $0.00087.
+
+| Test | Result | Detail |
+|---|---|---|
+| expected.json exists | passed | |
+| me-01.m4a | **failed** | wer 0.059, missing `RAG`: "your Rack project" again, the same as the first Whisper run |
+| me-02.m4a | passed | wer 0.0, "This is Javier Romo again". Exact this time, at $0.000111 instead of $0.000024. The garbled `Iqu�n` from the first run did not repeat; the different price suggests a different host served the call |
+| clip-01.wav | passed | wer 0.0 |
+| clip-02.wav | passed | wer 0.188, "boot camp" plus "Music" (within the 0.2 the course set) |
+| clip-03.wav | passed | wer 0.0 |
+| speech comes back as audio | passed | 83,040 bytes of MP3, $0.00087 |
+
+The eval's failure on `me-01` is the correct outcome: Whisper consistently hears "RAG" as "Rack" in my voice. I did not change the expected text or the tolerance to make it pass. The same clip transcribed twice gave two different results on `me-02`, so one transcription per clip is a sample, not a verdict.
+
 ## The answer, spoken
 
-_(to fill: characters, bytes, estimated cost, seconds; what each voice did with my name, "CPSC 415", "RAG")_
+The chatbot's typed answer to `me-01` (one chat call on `minimax/minimax-m3`, $0.00044), saved as `answer-me-01.txt`:
+
+> Hey Javier! In the RAG project over the course notes, a query cost under a tenth of a cent — the index had 165 chunks and that was the per-query spend on embeddings. The takeaway Sam noted was that retrieval, not the model, was what decided answer quality.
+
+**Grounding:**
+- "Under a tenth of a cent", "165 chunks", and "retrieval, not the model" are all in the profile.
+- "The per-query spend on embeddings" is not. The profile gives the cost of a query, not which part of it was embeddings. This is a small embellishment, and the refuse-to-fabricate rule says it should not be there.
+- The answer is three sentences, with no markdown.
+
+Spoken twice, one call each, from the same 256-character text:
+
+| Voice | File | Chars | Bytes | Cost (estimated) | Seconds |
+|---|---|---|---|---|---|
+| `microsoft/mai-voice-2.1-flash` / `en-US-Harper` (class default) | `answer-harper.mp3` | 256 | 372,480 | $0.00384 | 22.1 |
+| `microsoft/mai-voice-2.1-flash` / `en-IN-Priya` (comparison) | `answer-priya.mp3` | 256 | 443,520 | $0.00384 | 15.9 |
+
+Both costs are estimated from the catalog price per character: the generation record did not exist yet when `speak.py` looked it up.
+
+**What went wrong first:**
+- Priya timed out at the SDK's default timeout twice on the full answer, and once on the 20-character sentence "Hello from CPSC 415." (`httpx.ReadTimeout`, about 16 s). The provider was slow to start sending audio; it was not a problem with the length of the text.
+- The class model took 22 s for Harper, where the course measured under 1.4 s on October 26.
+- Fix: `speak.py` and `server.py` now create the client with `timeout_ms` from `SPEECH_TIMEOUT_MS` (default 120,000). Priya then answered in 15.9 s.
+- Whether the three timed-out calls were billed is not known; none of them returned a generation id.
+
+**What each voice did with my name, "RAG", and "165":** I listened to both. Harper and Priya both pronounced "Javier" correctly, said "RAG" as a word ("rag") rather than spelling it out, and read "165" naturally as a number. I heard no difference on these three. The difference between the voices was the accent and the timing: Priya's file is 19% larger for the same text, at the same price per character. (The answer did not contain "CPSC 415", so that could not be checked here.)
 
 ## Browser check
 

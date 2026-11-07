@@ -1,0 +1,4 @@
+# Local modules imported by name from voice/; without this, ruff sorts them differently
+# depending on whether it runs from the repo root or from voice/.
+[lint.isort]
+known-first-party = ["check", "transcribe", "speak", "server"]

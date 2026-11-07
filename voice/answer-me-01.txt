@@ -1,0 +1,1 @@
+Hey Javier! In the RAG project over the course notes, a query cost under a tenth of a cent — the index had 165 chunks and that was the per-query spend on embeddings. The takeaway Sam noted was that retrieval, not the model, was what decided answer quality.
