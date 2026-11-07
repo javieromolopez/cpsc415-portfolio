@@ -81,6 +81,11 @@ def voice_turn(audio: bytes, fmt: str) -> dict:
     except Exception as e:  # noqa: BLE001  (the provider's message, without the key)
         tts_error = str(e)[:300]
     seconds = {"stt": round(t1 - t0, 1), "chat": round(t2 - t1, 1), "tts": round(time.time() - t2, 1)}
+    costs = {"stt": heard["cost"], "chat": chat_cost, "tts": tts_cost}
+    total = sum(c or 0 for c in costs.values())
+    print(f"turn: heard {question!r}", flush=True)                 # for CHECKS.md's One turn section
+    print(f"turn: answer {reply!r}", flush=True)
+    print(f"turn: cost {costs}  total ${total:.5f}", flush=True)
     print(f"turn: stt {seconds['stt']}s  chat {seconds['chat']}s  tts {seconds['tts']}s"
           + (f"  TTS FAILED: {tts_error}  on: {reply[:160]!r}" if tts_error else ""), flush=True)
     return {"transcript": question, "answer": reply, "audio_b64": audio_b64, "tts_error": tts_error,

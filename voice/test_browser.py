@@ -15,7 +15,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-URL = "http://localhost:8000"
+URL = os.environ.get("URL", "http://localhost:8000")          # URL=https://my-site python -m pytest test_browser.py, for the deployed check
 CLIP = Path(__file__).parent / "clips" / "clip-02.wav"      # "Have you ever deployed anything with Kubernetes?"
 
 

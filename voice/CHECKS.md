@@ -100,10 +100,58 @@ Both costs are estimated from the catalog price per character: the generation re
 
 **What each voice did with my name, "RAG", and "165":** I listened to both. Harper and Priya both pronounced "Javier" correctly, said "RAG" as a word ("rag") rather than spelling it out, and read "165" naturally as a number. I heard no difference on these three. The difference between the voices was the accent and the timing: Priya's file is 19% larger for the same text, at the same price per character. (The answer did not contain "CPSC 415", so that could not be checked here.)
 
+## The server
+
+`/api/voice` runs in **the course example's server** (`voice/server.py`, Python `http.server`) with the example's profile, because my Java chatbot does not exist yet. My clips, checker, and tests are mine. `/api/voice` moves into the Java `ChatServer` before November 30.
+
+Changes from the example:
+- a longer speech timeout (`SPEECH_TIMEOUT_MS`);
+- each turn's transcript, answer, and three costs are logged on the server;
+- `test_browser.py` reads its URL from `URL`, so it can be run against the deployed site.
+
 ## Browser check
 
-_(to fill)_
+`python -m pytest test_browser.py -v` with the server running on `localhost:8000`, November 6, 2026, 19:32: **1 passed in 36.4 s.**
+- The test uploaded `clip-02.wav` (the Kubernetes question) through the page's file picker.
+- The server logged one turn: stt 1.4 s, chat 6.1 s, tts 1.4 s.
+- The transcript contained "Kubernetes". An answer longer than 20 characters came back, with no speech failure and an MP3 in the player.
+
+The last three assertions, read out:
+1. `all(auth is None for _, auth in requests)`: **no request from the browser carried an `Authorization` header.**
+2. `all("openrouter" not in url for url, _ in requests)`: **the browser never called the provider.**
+3. `any(url.endswith("/api/voice") for url, _ in requests)`: **it called our own server's `/api/voice`.**
+
+The page source also contained no `sk-or`. The key is read once, from the environment, by `server.py`, and never leaves it.
 
 ## One turn
 
-_(to fill: transcript, answer, three costs, total)_
+My own microphone in Chrome, hold-to-talk on `http://localhost:8000`, November 6, 2026, 19:37. Values are from the server log (the page showed the same numbers).
+
+- **Transcript:** "Have you ever deployed anything with Kubernetes?" (exactly what I said)
+- **Answer (spoken in Harper, 8 s):** "No, I haven't deployed anything with Kubernetes yet. None of my projects have needed more than one server, so I plan to learn it on the job."
+- **Grounding:** Kubernetes is in the profile's `not_yet` list with "No project has needed more than one server; I would learn it on the job." The answer says exactly that, in two sentences, and claims nothing extra.
+
+| Step | Model | Cost | Seconds |
+|---|---|---|---|
+| Transcription | `openai/whisper-large-v3-turbo` | $0.0000178 | 0.8 |
+| Answer | `minimax/minimax-m3` | $0.000337 | 1.9 |
+| Speech | `microsoft/mai-voice-2.1-flash` / Harper | $0.00210 | 0.7 |
+| **Total** | | **$0.00246** | **3.4** |
+
+About a quarter of a cent per voice question. Speech is 85% of it, the answer 14%, and transcription under 1%. A $5 key limit on the deployed site would cover about 2,000 voice questions. This number goes into `spec.md`'s hosting decision before November 30.
+
+**A second turn I did not mean to make.** Just before this turn, a short press of the button (about 0.8 s of audio, judging by the $0.0000026 transcription cost) came back from Whisper as **"Thank you."** The chatbot answered it ("You're welcome! Feel free to ask me about Sam's projects…"), and that turn cost $0.00213, almost all of it speech.
+- "Thank you." from near-silence is a known Whisper habit. Nothing at runtime can catch it, because there is no expected text to compare against.
+- The fix belongs in the server: refuse recordings shorter than about one second before any model call. For the deployed site, that saves a cent on every accidental tap.
+
+## No key in the repository
+
+Before tagging (November 6, 2026):
+- `grep -rIEc 'sk-or-v1-[A-Za-z0-9]{20,}'` over the working tree: 0 matches.
+- `git log -p --all | grep -Ec 'sk-or-v1-[A-Za-z0-9]{20,}'`: 0 matches.
+- The only `sk-or` strings in the repository are the placeholder `sk-or-v1-...` in `.claude/settings.local.json.example` and mentions in `plan.md`, this file, and `test_browser.py`'s own check.
+- The no-key run of `python -m pytest voice/tests`: 14 passed, 7 skipped (the billed ones). `ruff check voice`: all checks passed.
+
+## What the lab cost
+
+About $0.03 in all: two Whisper sets ($0.00013 each), one Scribe set ($0.0024), two billed eval runs (about $0.001 each), one chat answer ($0.0004), two spoken answers ($0.0077), the browser check (about $0.0025), and two microphone turns ($0.0046). The three timed-out Priya calls may also have been billed.
