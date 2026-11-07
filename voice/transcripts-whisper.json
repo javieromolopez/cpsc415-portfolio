@@ -1,0 +1,74 @@
+[
+  {
+    "text": " Hi, I'm Javier Romo from CPSC 415.  How much did a query cost in your Rack project?",
+    "model": "openai/whisper-large-v3-turbo",
+    "audio_seconds": 9.364,
+    "cost": 3.118212e-05,
+    "seconds": 3.4,
+    "file": "me-01.m4a",
+    "check": {
+      "ok": false,
+      "wer": 0.059,
+      "missing": [
+        "RAG"
+      ],
+      "empty": false
+    }
+  },
+  {
+    "text": " This is Javier Romo Iqu\u00e9n.  Have you shipped anything written in Rust?",
+    "model": "openai/whisper-large-v3-turbo",
+    "audio_seconds": 7.103,
+    "cost": 2.365299e-05,
+    "seconds": 2.6,
+    "file": "me-02.m4a",
+    "check": {
+      "ok": false,
+      "wer": 0.167,
+      "missing": [],
+      "empty": false
+    }
+  },
+  {
+    "text": " What programming languages have you shipped code in, and which one would you choose for a new web service?",
+    "model": "openai/whisper-large-v3-turbo",
+    "audio_seconds": 6.38,
+    "cost": 2.12454e-05,
+    "seconds": 1.3,
+    "file": "clip-01.wav",
+    "check": {
+      "ok": true,
+      "wer": 0.0,
+      "missing": [],
+      "empty": false
+    }
+  },
+  {
+    "text": " Have you ever deployed anything with Kubernetes?  Be honest, I'm comparing you with a boot camp graduate.  Music",
+    "model": "openai/whisper-large-v3-turbo",
+    "audio_seconds": 8.061,
+    "cost": 2.684313e-05,
+    "seconds": 1.6,
+    "file": "clip-02.wav",
+    "check": {
+      "ok": true,
+      "wer": 0.188,
+      "missing": [],
+      "empty": false
+    }
+  },
+  {
+    "text": " Tell me about the RAG project from CPSC 415.  How many chunks did the index have and what did a query cost?",
+    "model": "openai/whisper-large-v3-turbo",
+    "audio_seconds": 7.708,
+    "cost": 2.566764e-05,
+    "seconds": 3.8,
+    "file": "clip-03.wav",
+    "check": {
+      "ok": true,
+      "wer": 0.0,
+      "missing": [],
+      "empty": false
+    }
+  }
+]
