@@ -91,3 +91,62 @@ This is a small, sequential build for a solo student project — no team and no 
 No worktree or remote isolation is needed; everything lands on the existing `feature/profile-site` branch.
 
 **Approved by:** Javier Romo, October 25, 2026
+
+## Week 7
+
+Implements the "Week 7: spoken interface" section of `spec.md`. Approved before the first code commit. Commits go to `main` (the Week 7 working rule in `CLAUDE.md`).
+
+### Files to create
+| File | Purpose |
+|---|---|
+| `voice/check.py` | Checker: `words`, `wer`, `compare` (no key) |
+| `voice/tests/test_check.py` | No-key tests of the checker, written first |
+| `voice/transcribe.py` | Transcriber: one clip or a whole `expected.json` set |
+| `voice/speak.py` | Speaker: MP3, or WAV through PCM |
+| `voice/tests/test_eval.py` | Billed eval, skipped without a key |
+| `voice/clips/` | The three course fixture clips plus my two clips (`me-01`, `me-02`), with `expected.json` written by me before transcription |
+| `voice/transcripts-whisper.json`, `voice/transcripts-scribe.json` | Results from both transcription models |
+| `voice/answer-harper.mp3`, `voice/answer-priya.mp3` | The chatbot's answer to my first clip, spoken in two voices |
+| `voice/profile.json` | The example's profile (fictional) until the Java chatbot's profile replaces it |
+| `voice/server.py`, `voice/index.html` | `/api/voice`, `/api/ask`, the recorder page |
+| `voice/test_browser.py` | Playwright check against `localhost:8000`, with the URL overridable through `URL` |
+| `voice/CHECKS.md` | Every measured number, the linter's findings, the browser run, the One turn section |
+| `voice/.gitignore` | `last-answer.mp3`, `__pycache__/` (transcripts are committed) |
+
+### Order of work
+1. **Tests first, then the checker.** Write `tests/test_check.py` from behaviors 8–10, run it and watch it fail (no `check.py` yet), then write `check.py` and run it green. Run `ruff check voice`. Commit "Voice: transcript checker with tests".
+2. **Transcriber, speaker, billed eval.** Add `transcribe.py`, `speak.py`, and `tests/test_eval.py`. The no-key test run still passes, and the eval skips without a key.
+3. **My clips.** I record `me-01` and `me-02` (the two sentences in `intent/voice.md`) and write `clips/expected.json` myself, including the course clips' entries, before any model hears them. Transcribe the set once on Whisper and once on Scribe. Then I play each clip and read both transcripts in my own terminal, and record which model got "Javier Romo" right. Commit "Voice: own clips transcribed on two models".
+4. **The answer, spoken.** Get the chatbot's typed answer to `me-01` through `/api/ask` (one chat call). Speak it once with Harper and once with Priya, listen to both, and record characters, bytes, cost, and seconds, plus what each voice did with "CPSC", "415", and "RAG". Commit "Voice: the answer spoken, two voices".
+5. **The loop.** Run the server, run `test_browser.py` with it up, and record its assertions. Then one real turn on the microphone with a question from the test set: the transcript, the answer, the three costs, and the total go into the **One turn** section. Commit "Voice: the loop, with the browser check". Tag `week07-submitted` and push.
+
+### Risks
+- **My name mis-transcribed** (for example "Havier", "Romero"). The question still gets answered, because the name is not needed to answer it. Only the checker notices: `must_contain` fails the clip in `CHECKS.md`. The visitor sees the transcript on the page.
+- **Room noise or accent raises the word error rate above 0.15.** I record again in a quiet room. Any raised `max_wer` must carry a `note`; the expected text is never edited to match a transcript (the guard blocks edits to `expected.json`).
+- **The transcript stops halfway** because of a wrong MP3 header. My clips are recorded or converted to WAV or M4A, and the second transcriber is the check.
+- **A visitor holds the button down for a minute.** About 60 s of audio is still under a tenth of a cent on Whisper, but the request size is capped at 10 MB. The chat answer is capped at three sentences, which limits the speech cost. The per-IP rate limit is for the hosting milestone.
+- **A recording format the model rejects** (for example Safari's `audio/mp4`). The server maps known content types (`FORMATS`) and returns 415 for anything else, without calling a model.
+- **minimax-m3 spends its tokens on hidden reasoning and returns an empty answer.** `max_tokens=1500`, and an empty answer becomes "I couldn't put an answer together", which is shown rather than sent to the speech model.
+- **The key leaks to the browser or into git.** The server reads it from the environment and only the server calls the provider. The browser check asserts it, and `git log -p | grep sk-or` is run before tagging.
+
+### Questions asked about this plan
+- *If the transcriber turns my name into a different word, what does the chatbot do with the question, and which test notices?* It answers normally, because the question does not depend on the name. The checker's `must_contain` reports the name as missing in the transcripts file and `CHECKS.md`; `test_check.py::test_names_that_must_survive` proves the checker catches it even when the word error rate is within tolerance.
+- *What does one voice turn cost on the class models, and what happens if a visitor holds the button down for a minute?* About half a cent, mostly the speech. A minute of audio adds about $0.0002 of transcription. The answer stays at three sentences, so the speech cost does not grow with it, and the 10 MB cap bounds the upload.
+- *What does the server do with a recording in a format the model rejects?* An unknown `Content-Type` gets a 415 before any call. A known type the provider still rejects comes back as a 502 with the provider's message, and nothing is spoken.
+
+### Proof
+**No-key tests (free, run on every change):** `python -m pytest voice/tests/test_check.py -v`. They prove the checker's verdicts:
+- a perfect transcript scores 0;
+- one substituted word in thirteen scores 1/13;
+- an empty or `None` transcript scores 1.0, is reported as `empty`, and does not raise;
+- a required name is reported missing even within tolerance;
+- "four fifteen" does not count as "415";
+- case, punctuation, and spacing do not count.
+
+They prove nothing about a model.
+
+**Billed eval (skipped without a key):** `python -m pytest voice/tests/test_eval.py -v -s`. It transcribes each of the five clips once on Whisper and checks it, and makes one speech call to confirm the reply is audio. Cost: about $0.0002 for transcription plus about $0.001 for speech, so about **$0.002 per run**. The Scribe comparison is a separate single run of `transcribe.py --set ... --model elevenlabs/scribe-v2`, about $0.003. With the two spoken answers (about $0.01), the browser check (about $0.005), and one real turn (about $0.005), the whole lab is about **$0.03**.
+
+**By hand:** I listen to both spoken answers and the real turn. The browser check's last three assertions (no `Authorization` header, no request to the provider, one request to `/api/voice`) are read out and recorded.
+
+**Approved by:** Javier Romo, November 6, 2026
