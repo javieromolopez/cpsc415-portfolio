@@ -14,6 +14,7 @@
 `ruff check voice`:
 - First run: 1 finding, `RUF100` (an unused `# noqa: E402` on the test's import). Removed.
 - Second run: all checks passed.
+- After adding `transcribe.py`, `speak.py`, and `tests/test_eval.py`: 1 finding, `I001` (import order in `transcribe.py`: ruff treats the local `check` module as third-party). Fixed with `ruff check --fix`; all checks passed.
 
 ## Transcription, per clip per model
 
