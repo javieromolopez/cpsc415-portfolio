@@ -1,26 +1,77 @@
 {
-  "name": "Sam Rivera",
-  "headline": "Trinity College senior, computer science. Looking for a first software job in 2027.",
+  "name": "Javier Romo",
+  "headline": "Trinity College junior studying Data Science. Open to internships, short collaborations, and hackathons.",
+  "github": "javieromolopez",
   "projects": [
     {
-      "name": "Ask the course (RAG over course notes)",
-      "what": "A command-line program that indexes the course's Markdown pages with OpenRouter embeddings and answers questions from the top-scoring chunks.",
-      "why": "Python, because the course examples were Python and the cosine math is clearer there; text-embedding-3-small because it was the cheapest model that passed the five-question eval.",
-      "breaks": "Questions whose answer is spread across three pages: the top-three chunks miss one of them.",
-      "learned": "The index had 165 chunks and a query cost under a tenth of a cent; the retrieval, not the model, decided the answer quality."
+      "name": "Disaster Response Pipeline",
+      "when": "Spring 2026",
+      "role": "solo",
+      "what": "A Java program built on my own data structures: a binary search tree, a hash map, a max-heap, and an undirected graph.",
+      "stack": ["Java"]
+    },
+    {
+      "name": "Contacts App",
+      "when": "Spring 2026",
+      "role": "solo",
+      "what": "A Java contacts manager backed by my own BST-based map ADT.",
+      "stack": ["Java"]
+    },
+    {
+      "name": "Lyrics Trainer",
+      "repo": "javieromolopez/cpsc415-week01",
+      "when": "September 2026",
+      "role": "solo, directing a coding agent",
+      "what": "A web page that helps you memorize a Shakespeare poem one line at a time, with next, previous, and jump-to-end buttons.",
+      "stack": ["HTML", "CSS", "JavaScript"]
+    },
+    {
+      "name": "OpenRouter Chat Client",
+      "repo": "javieromolopez/cpsc415-week02",
+      "when": "September 2026",
+      "role": "solo",
+      "what": "A single-file Java command-line client that sends a question to a model through OpenRouter and prints the answer with its token usage.",
+      "stack": ["Java", "OpenRouter"]
+    },
+    {
+      "name": "Support Message Classifier",
+      "repo": "javieromolopez/cpsc415-week03",
+      "when": "October 2026",
+      "role": "solo",
+      "what": "A Java classifier that routes support messages into a strict JSON schema, with an eval harness of five cases including an ambiguous one and an off-topic one.",
+      "stack": ["Java", "Jackson", "OpenRouter"]
+    },
+    {
+      "name": "Ask the Course",
+      "repo": "javieromolopez/cpsc415-week04",
+      "when": "October 2026",
+      "role": "solo",
+      "what": "A retrieval-augmented command-line tool that answers questions about the course from its Markdown pages, cites the file and section, and refuses when the pages do not contain the answer.",
+      "stack": ["Python", "OpenRouter embeddings"]
     },
     {
       "name": "Receipt reader",
-      "what": "A vision model reads a photographed receipt into JSON and the code checks that the items add up.",
-      "why": "Two class models compared on seven receipts; the checker is plain code so the model's arithmetic is never trusted.",
-      "breaks": "A discount printed as a negative number; every model copied the sign and the total failed.",
-      "learned": "Edge cases are specification questions, not model bugs."
+      "repo": "javieromolopez/cpsc415-week05",
+      "when": "October 2026",
+      "role": "solo",
+      "what": "A vision model reads a receipt photo into JSON and plain Python checks that the items and the total add up; it reports problems and never auto-corrects.",
+      "stack": ["Python", "pytest", "OpenRouter vision"]
+    },
+    {
+      "name": "Science diagram generator (Team Project 1)",
+      "repo": "javieromolopez/TP1",
+      "when": "October to November 2026",
+      "role": "team member",
+      "what": "A web app where a student picks a science topic, an image model draws a labeled diagram, and a vision model critiques the image itself, with the verdict computed in code.",
+      "stack": ["Python", "FastAPI", "OpenRouter image and vision models"]
     }
   ],
-  "skills_shipped": ["Python", "Java", "Git and GitHub pull requests", "pytest", "OpenRouter chat, embeddings, vision, and image APIs"],
+  "skills_shipped": ["Java", "Jackson", "HTML, CSS, and JavaScript", "Python", "pytest", "OpenRouter chat, embeddings, vision, and image APIs", "Git and GitHub"],
   "not_yet": [
-    {"skill": "Kubernetes", "why": "No project has needed more than one server; I would learn it on the job."},
-    {"skill": "React", "why": "The portfolio site is static HTML on purpose; a framework is on the list for the spring."},
-    {"skill": "Rust", "why": "Curious, not started."}
-  ]
+    {"skill": "React or Vue", "why": "Deliberately deferred; my web pages so far are plain HTML and JavaScript. Open to learning one on a collaboration."},
+    {"skill": "Multi-agent orchestration", "why": "Understood in theory from the course; not built yet."},
+    {"skill": "Python data science at depth", "why": "I use Python for course projects, but my data science work so far is a DataCamp course and basic scripting."}
+  ],
+  "open_to": ["internships", "short-term collaborations", "hackathon teammates", "backend Java projects", "frontend-heavy work, as something to learn"],
+  "not_open_to": ["full-time roles before graduation", "long-term commitments this semester"]
 }
