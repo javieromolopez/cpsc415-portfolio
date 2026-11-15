@@ -150,3 +150,64 @@ They prove nothing about a model.
 **By hand:** I listen to both spoken answers and the real turn. The browser check's last three assertions (no `Authorization` header, no request to the provider, one request to `/api/voice`) are read out and recorded.
 
 **Approved by:** Javier Romo, November 6, 2026
+
+## Week 8
+
+Implements the "Week 8: one tool" section of `spec.md` (behaviors 15–27). Approved before the first code commit. Commits go to `main` (the Week 8 working rule in `CLAUDE.md`).
+
+### Files to create or change
+| File | Why |
+|---|---|
+| `tools/__init__.py` | Makes `tools/` importable from `voice/server.py` and the tests |
+| `tools/github.py` | `TOOL` (the schema, behavior 15), `OWNER`, `recent_commits()` (behaviors 17, 18, 21); `urllib` only |
+| `tools/loop.py` | `validate()`, `run_tool()`, `run()`: parsing and validation (16), unknown tool (19), cap (20), GitHub unavailable (21), side-effect rule (23), parallel calls (24), cost (26) |
+| `tools/check.py` | `check_answer()`: the three claim rules (22) |
+| `tools/tests/test_loop.py` | No-key tests: a scripted `FakeClient` and stubbed functions; the six misuse cases plus the edges |
+| `tools/tests/test_github.py` | No-key tests of `recent_commits` with `urllib` replaced by a fake: 200, 404, 403, timeout, a repo that is not Javier's |
+| `tools/tests/test_eval.py` | The billed eval: five questions × two models; skipped without `OPENROUTER_API_KEY` |
+| `tools/CHECKS.md` | The eval table, the three totals, Misuse cases, What the check cannot catch, The cost of a tool, the linter's findings |
+| `voice/server.py` | `answer()` goes through `tools.loop.run`; returns the trace; `/api/ask` and `/api/voice` include it (25) |
+| `voice/index.html` | Shows the trace under the answer (the tool calls and what came back) |
+
+### Order of work
+1. **Tests first, red.** Write `tools/tests/test_loop.py` and `tools/tests/test_github.py` from behaviors 15–24, run them, and watch them fail (no `tools/*.py` yet). Commit "Tools: the loop's misuse cases (failing, no code yet)".
+2. **The code, green.** Write `github.py`, `check.py`, `loop.py` until every no-key test passes. Run `ruff check tools`. Commit "Tools: the loop and its misuse cases, tests first".
+3. **The tool in the chatbot.** `answer()` in `voice/server.py` calls `run()` with the existing system prompt (plus one sentence telling the model when to use the tool) and `max_steps=4`. Re-run the Week 7 no-key tests so nothing there broke. One real typed question through `/api/ask` to see the trace. Commit "Tools: one real tool in the chatbot".
+4. **The billed eval.** Write `tools/tests/test_eval.py` with the five questions, the tools that must be called, and the words the answer must and must not contain. Run it once per model and record every line in `CHECKS.md`. Commit "Tools: five questions on two models".
+5. **Findings.** The three sections and the linter's findings in `CHECKS.md`. Commit "Tools: checks and findings", tag `week08-submitted`, push.
+
+### Risks
+- **The model never calls the tool.** The description is an instruction ("use this before saying anything about what Javier has worked on lately"), and the system prompt says the same. Eval question 1 fails if no call is made.
+- **The model passes a bare name** ("TP1") instead of "javieromolopez/TP1". The error result says exactly what to send; the second step should succeed. If it keeps failing, the cap stops it and the trace shows the error text the model was reading.
+- **minimax-m3 loops** (asks for the same repo again and again, or one repo per step). The cap of 4 stops it with the program's sentence; the eval records the steps.
+- **MiMo answers nothing** with hidden reasoning on. Sent with `reasoning: {"enabled": false}` (spec, Loop).
+- **GitHub's rate limit** (60 an hour without a token) during the eval. Ten questions use at most about 20 GitHub calls. If the limit trips, the eval records the fixed sentence for that question, and I set `GITHUB_TOKEN` in my environment and rerun.
+- **The claim check is too strict** (a date said as "the 9th", a sha mentioned from the profile) and replaces a true answer. The eval records every replaced answer with the model's original text, so I can see false alarms. The answer prompt asks for no shas (spoken answers), which keeps most answers free of them.
+- **A test reaches the network or a model.** Every no-key test passes a `FakeClient` and stubbed `functions`; `test_github.py` replaces `urllib.request.urlopen`. Running with the network off would still pass.
+- **The key in git.** It is read from the environment only; `git log -p | grep sk-or` before tagging.
+
+### Questions asked about this plan
+- *If the model asks for the tool with the wrong argument name, what exactly goes back to it, and what does the second test assert?* For `{"repository": "TP1"}` the result is one error naming both problems and the fix: `{"error": "unexpected argument 'repository'; missing required argument 'repo'; send {\"repo\": \"javieromolopez/<name>\"}"}`. It goes back as a `tool` message with the request's `tool_call_id`, and `recent_commits` is not called. **Correction:** the draft's validator stopped at the first problem, so the model would only have read "missing 'repo'" and could not tell that `repository` was the wrong name. `validate` now reports every problem in one message. Also, the second test now scripts the model correcting itself. Step 1 sends the bad call. Step 2's request must contain that error as a `tool` message with the matching id, and the model then sends `{"repo": "javieromolopez/TP1"}`, which runs the stub exactly once with those arguments. Step 3 is the answer. That proves the error reached the model and that the loop continued.
+- *What stops a model that asks for the same tool ten times, and what does the visitor see when it does?* Ten replies in a row are stopped by the step cap. After the fourth chat call the loop ends without a fifth, and the visitor sees "I couldn't finish answering that in 4 steps. Please ask a narrower question.", never the model's text. The trace shows all four calls. **Correction:** the step cap counts chat calls, not tool calls, so one reply asking for the tool ten times at once would have run ten GitHub requests inside a single step. The loop now also runs **at most 4 tool calls per question**. Any further request gets `{"error": "tool call limit reached (4 per question); answer from the results you have"}` without running, and the trace records it. A new test covers this: one scripted reply with six calls, after which the stub's counter is 4 and the last two results are the limit error. Spec behavior 20 is amended to match.
+
+### Proof
+**No-key tests (free, under a second, run on every change):** `python -m pytest tools/tests/test_loop.py tools/tests/test_github.py -v`. The six misuse cases, each a scripted fake model:
+1. **Single shot:** the model asks for `recent_commits` once and then answers. The result goes back as a `tool` message whose `tool_call_id` matches the request, the loop makes exactly two chat calls, and `stopped_by == "answer"`.
+2. **Bad arguments:** the model sends `{"repository": "TP1"}`. The result is one error naming both `repository` (unexpected) and `repo` (missing), and the stub is not called. The next request carries that error with the matching `tool_call_id`. The model's corrected call then runs the stub exactly once, and the loop ends with its answer.
+3. **Unknown tool:** the model asks for `delete_repo`. The result is an error naming `recent_commits`, nothing runs, and the loop continues.
+4. **Endless caller:** the model asks for the tool on every reply. The loop stops after 4 chat calls, the answer is the program's cap sentence, and the model's text is not used. A second test sends six calls in one reply: the stub runs 4 times, and the last two get the limit error.
+5. **Side effect held:** with a test-only side-effect tool registered, the model asks for it. The result is pending, the tool's function is never called (its call counter stays at 0), and `pending` records the request.
+6. **Unsupported claim:** the tool returns two commits; the model answers with a third sha and a date it never got. `check_answer` lists both, and the visitor gets the claim-check sentence.
+
+Plus the edges: arguments that are not JSON; `count` as a string, a boolean, or 11; a repo outside `javieromolopez/`; two tool calls in one reply each with its own id; GitHub unavailable stopping the loop with its sentence; and `recent_commits` turning 200, 404, 403, and a timeout into the right results. These prove what our code does with any reply. They prove nothing about what a real model will do.
+
+**Billed eval (skipped without a key):** `python -m pytest tools/tests/test_eval.py -v -s`. Five questions, each on `minimax/minimax-m3` and `xiaomi/mimo-v2.6-flash`:
+1. "What has Javier been committing to TP1 lately?" (the tool must be called with `javieromolopez/TP1`)
+2. "What are the latest commits in Javier's Kubernetes repository?" (he has none; the answer must not invent any)
+3. "Does Javier know Java?" (the profile answers it; does the model call the tool anyway?)
+4. "What did Javier commit yesterday?" (invites an invented result; the claim check must pass)
+5. "What changed most recently in his receipt reader and in his RAG project?" (two calls: week05 and week04)
+
+Each line records the tools called, the steps, pass or fail (the required calls made, the must and must-not words, the claim check), the cost, and the seconds. It proves how these two models behaved on these five questions on one day. Cost: about **$0.01–0.02** for both models.
+
+**Approved by:** Javier Romo, November 15, 2026
