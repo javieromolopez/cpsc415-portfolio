@@ -194,3 +194,53 @@ Implements `intent/voice.md`. Lives in `voice/`. Until the Java chatbot exists, 
 - Speech: about $0.000015 per character, so $0.003–0.005 for a two- or three-sentence answer.
 - One voice turn on the class models: about **$0.005** (measured $0.0035–0.0057 on the example), mostly the speech.
 - The whole lab: about $0.03. This per-turn number goes into the hosting decision before November 30.
+
+## Week 8: one tool
+
+Implements `intent/tools.md`. Lives in `tools/`. The chatbot gets one read-only tool, `recent_commits`, called through a loop that our code controls. The answer function in `voice/server.py` (shared by the typed path `/api/ask` and the voice path `/api/voice`) goes through this loop, so both paths get the tool. Since November 10 the profile is Javier's own (`voice/profile.json`), not the course example's; the Week 7 note above about the fictional student is out of date.
+
+### Tool (`tools/github.py`)
+- **What it does:** Holds the schema the model sees and the function our code runs. `recent_commits(repo, count=5)` returns the last `count` commits (short sha, date, first line of the message) of one of Javier's public repositories, from `GET https://api.github.com/repos/{repo}/commits?per_page={count}`. It never raises: every failure comes back as a result dict.
+- **Language:** Python 3, standard library `urllib` only. **Why:** The answer function it plugs into is Python (`voice/server.py`), the course example is Python, and a GET with two headers needs no dependency. Alternative considered: Java with `java.net.http.HttpClient` and Jackson, matching the eventual chatbot. Rejected for this week because the Java chatbot does not exist yet; it moves with the answer function before November 30.
+- **Model:** None. The tool is plain code.
+- **Interfaces:** `TOOL` (the schema, below); `OWNER = "javieromolopez"`; `recent_commits(repo: str, count: int = 5) -> dict`. Reads an optional `GITHUB_TOKEN` from the environment.
+
+### Loop (`tools/loop.py`)
+- **What it does:** One visitor question in, one answer out. Sends the messages with `tools=[TOOL]`; if the reply has `tool_calls`, records the request as an assistant message, validates and runs (or refuses) each call, and sends each result back as a `tool` message with the matching `tool_call_id`; repeats until the model answers without a tool call, the step cap trips, or GitHub is unavailable. Returns the answer with the full trace.
+- **Language:** Python. **Why:** Same as the tool; the loop must be importable by `voice/server.py` and by tests that pass in a scripted fake client.
+- **Model:** **Class model `minimax/minimax-m3`** (the chatbot's model since Week 7; supports tool calling on OpenRouter). **Comparison `xiaomi/mimo-v2.6-flash`** (the other class model; supports tool calling; sent with `reasoning: {"enabled": false}`, because with hidden reasoning on it spends the whole budget thinking and returns nothing). Both with `max_tokens=1500`, the Week 7 setting.
+- **Interfaces:** `run(question, system, model=..., max_steps=4, client=None, functions=None, side_effects=frozenset()) -> {answer, stopped_by, steps, calls, pending, cost, seconds, check}`. `stopped_by` is `"answer"`, `"cap"`, `"github_unavailable"` or `"claim_check"`. `functions` maps tool names to callables (defaults to `{"recent_commits": recent_commits}`); tests pass stubs, so no test touches the network. `validate(name, args) -> str | None` and `run_tool(name, arguments, ...) -> dict` are the decision, in plain code.
+
+### Claim check (`tools/check.py`)
+- **What it does:** Reads the answer and the trace in plain code and lists claims the tool results do not support.
+- **Language:** Python, no dependencies. **Model:** None. The answer must be checked by something other than the model that wrote it.
+- **Interfaces:** `check_answer(answer: str, steps: list) -> {"supported": bool, "unsupported": [str]}`.
+
+### Behavior (Week 8)
+15. **The schema the model sees** is sent with every request as `tools`:
+    - `name`: `recent_commits`
+    - `description`: "The most recent commits in one of Javier's public GitHub repositories. Use this before saying anything about what Javier has worked on lately or committed. The repository must be one listed in the profile, written as javieromolopez/<name>."
+    - `parameters` (JSON Schema): `{"type": "object", "properties": {"repo": {"type": "string", "description": "javieromolopez/<name>, for example javieromolopez/TP1"}, "count": {"type": "integer", "minimum": 1, "maximum": 10, "description": "How many commits, 1 to 10; default 5"}}, "required": ["repo"], "additionalProperties": false}`
+16. **`arguments` is parsed and validated in code** against that schema before anything runs. It must be a JSON string that parses to an object; `repo` is required and a string; `count`, if present, is an integer from 1 to 10 (a boolean is not an integer); no other keys. Any failure returns `{"error": "<what was wrong and what to send instead>"}` as the tool result, and the loop continues, so the model can correct itself. Example: `{"repository": "TP1"}` gets `{"error": "missing required argument 'repo'; send {\"repo\": \"javieromolopez/<name>\"}"}`.
+17. **Only Javier's repositories.** A `repo` that is not `javieromolopez/<name>` (with `<name>` of letters, digits, `.`, `-`, `_`) returns `{"error": "only javieromolopez/<name> repositories can be read; got '<repo>'"}` without a network call. The model picks the repository from the profile's `repo` fields; the program never picks one it was not asked for.
+18. **A repository that does not exist** (GitHub 404) returns `{"error": "no public repository named '<repo>'", "exists": false}`. The model is expected to say so; behavior 22 catches it if it invents commits instead.
+19. **A call to an unknown tool** returns `{"error": "unknown tool '<name>'; the only tool is recent_commits"}` as its result. Nothing runs, and the loop continues.
+20. **The loop stops at a step cap of 4** (one step = one chat call). If the model is still asking for tools after the fourth call, the visitor gets the program's sentence: *"I couldn't finish answering that in 4 steps. Please ask a narrower question."* The model's text is not used; `stopped_by` is `"cap"`, and the trace keeps every call.
+21. **GitHub unavailable** (403 or 429 rate limit, 5xx, timeout, network error) returns `{"error": "...", "unavailable": true}`. It is recorded in the trace like any result; then the loop stops without another chat call and the visitor gets the program's sentence: *"I couldn't reach GitHub just now, so I can't say what Javier has committed recently. Please ask again in a little while."* `stopped_by` is `"github_unavailable"`.
+22. **An answer that claims something the tool did not return is flagged by code** (`check_answer`), on three rules:
+    - every hexadecimal token of 7 to 40 characters in the answer must be the start of a sha that some tool result returned;
+    - every date in the answer (`2026-11-09`, `November 9`, `Nov 9`) must be the date of a commit that some tool result returned;
+    - if no tool result returned any commits, an answer that says something was committed or pushed ("committed", "pushed", or "commit" with a date, "yesterday", "today", or "this week") is flagged.
+
+    A flagged answer is not shown. The visitor gets the program's sentence instead: *"I can only tell you about commits I actually found on GitHub, and I couldn't back that answer up. Try asking about one of Javier's repositories by name."* `stopped_by` is `"claim_check"`; the model's original answer and the list of unsupported claims stay in the trace for the eval. (Corrected at approval: the draft only flagged the answer and still showed it.)
+23. **A tool with a side effect is never run on the model's request alone.** `run_tool` takes a set of side-effect tool names; a request for one returns `{"error": "<name> needs a person's confirmation first", "pending": {...}}`, the request is recorded in `pending`, and the function is not called. `recent_commits` is read-only, so the shipping set is empty; the rule is proven with a test-only side-effect tool.
+24. **Several tool calls in one reply** each get their own result, each with its own `tool_call_id`, in the order asked.
+25. **The trace is returned with the answer.** `answer(question)` in `voice/server.py` returns the text, the cost, and the trace (each tool call with its arguments, result, and seconds). `/api/ask` and `/api/voice` include the trace in their JSON. The spoken answer is still only the answer text.
+26. **Every tool call costs an extra chat call**, because the result must go back to the model before it can answer. The loop adds up `usage.cost` from every chat call in a question; the eval records the cost per question, the steps, and the seconds, and compares questions with and without a tool call. Ceiling: **under $0.01 per question**, tool calls included.
+27. **No-key tests and the billed eval are separate.** The six misuse cases run with a scripted fake client and stubbed functions: no key, no network. The billed eval (five questions, two models) skips when `OPENROUTER_API_KEY` is unset.
+
+### Cost estimate (Week 8)
+- A question without a tool: one chat call, about $0.001 on `minimax-m3` with the profile in the prompt.
+- A question with one tool call: two chat calls plus the result tokens, about $0.002–0.003. At the 4-step cap, at most four chat calls, about $0.005: under the $0.01 ceiling.
+- The billed eval: 5 questions × 2 models, about $0.01–0.02. GitHub's API is free (60 requests an hour without a token).
+- The per-question number with a tool joins the per-turn cost in the hosting decision before November 30.
