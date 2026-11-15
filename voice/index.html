@@ -28,7 +28,14 @@ function show(d, status) {
   const cost = d.cost ? `stt $${d.cost.stt ?? "?"} · chat $${d.cost.chat ?? "?"} · tts $${d.cost.tts ?? "?"}` : "";
   const secs = d.seconds ? `  ·  ${d.seconds.stt ?? "?"}s + ${d.seconds.chat ?? "?"}s + ${d.seconds.tts ?? "?"}s` : "";
   const err = d.tts_error ? `\n\n(speech failed: ${d.tts_error})` : "";
-  out.textContent = `You said: ${d.transcript}\n\nAnswer: ${d.answer}\n\n[${cost}${secs}]${err}`;
+  const t = d.trace;   // Week 8: which tools ran, with what, and what came back (textContent: never parsed as HTML)
+  const steps = t ? t.steps.filter(s => s.tool).map(s => {
+    const r = s.result || {};
+    const got = r.commits ? `${r.commits.length} commits` : r.error ? `error: ${r.error}` : JSON.stringify(r);
+    return `  ${s.tool}(${s.arguments}) -> ${got}`; }) : [];
+  const tools = t ? `\n\nTools (stopped by ${t.stopped_by}):\n${steps.length ? steps.join("\n") : "  none called"}` +
+    (t.check && !t.check.supported ? `\n  claim check: ${t.check.unsupported.join("; ")}` : "") : "";
+  out.textContent = `You said: ${d.transcript}\n\nAnswer: ${d.answer}\n\n[${cost}${secs}]${err}${tools}`;
   if (d.audio_b64) { player.src = "data:audio/mpeg;base64," + d.audio_b64; player.hidden = false; player.play(); }
 }
 

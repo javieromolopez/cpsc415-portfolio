@@ -17,11 +17,15 @@ import base64
 import json
 import os
 import pathlib
+import sys
 import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from openrouter import OpenRouter
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))   # the repository root, for tools/
+from tools.loop import run as tool_loop
 
 from speak import DEFAULT_MODEL as TTS_MODEL
 from speak import DEFAULT_VOICE as TTS_VOICE
@@ -42,6 +46,10 @@ Rules: shipped work is in "projects" and "skills_shipped"; anything in "not_yet"
 deliberately not done, and you say so plainly. If the profile does not cover the question, say that you don't
 know rather than guessing. Never claim experience the profile does not record. Answer in two or three spoken
 sentences: this answer will be read aloud, so no lists, no markdown, no URLs.
+The profile does not say what the person has worked on lately. For that, call recent_commits with a repository
+from a project's "repo" field, written exactly as it appears there. Say only what the tool returned; if it says a
+repository does not exist, say so. Never name a commit, a date, or a change the tool did not return, and never
+read out commit ids.
 
 PROFILE:
 """ + json.dumps(PROFILE, indent=1)
@@ -49,16 +57,17 @@ PROFILE:
 client = OpenRouter(api_key=KEY, timeout_ms=int(os.environ.get("SPEECH_TIMEOUT_MS", "120000")))   # speech timed out at the SDK default on Nov 6
 
 
-def answer(question: str) -> tuple[str, float | None]:
+def answer(question: str) -> tuple[str, float | None, dict]:
     """The chatbot's answer function; the typed path and the voice path both call it.
-    max_tokens counts the model's hidden reasoning too: at 400, minimax-m3 sometimes spent it all
-    thinking and returned an empty answer (October 26), which the speech model then refused."""
-    c = client.chat.send(model=CHAT_MODEL, max_tokens=1500,
-                         messages=[{"role": "system", "content": SYSTEM}, {"role": "user", "content": question}])
-    text = (c.choices[0].message.content or "").strip()
-    if not text:                                    # an empty answer is a failed answer, said so, not spoken
-        text = f"I couldn't put an answer together (the model stopped: {c.choices[0].finish_reason}). Please ask again."
-    return text, getattr(c.usage, "cost", None)
+    Since Week 8 it goes through the tool loop (tools/loop.py): at most 4 chat calls, the program's
+    sentence at the cap, when GitHub is down, or when the claim check fails. Returns the text, the
+    cost of every chat call in the question, and the trace (spec behavior 25).
+    max_tokens=1500 (inside the loop) counts hidden reasoning too: at 400, minimax-m3 sometimes spent
+    it all thinking and returned an empty answer (October 26); the loop turns that into a sentence."""
+    r = tool_loop(question, SYSTEM, model=CHAT_MODEL, max_steps=4, client=client)
+    trace = {k: r[k] for k in ("stopped_by", "steps", "calls", "pending", "check", "seconds")}
+    print(f"answer: stopped_by={r['stopped_by']} calls={r['calls']} cost=${r['cost']:.5f}", flush=True)
+    return r["answer"], r["cost"], trace
 
 
 def voice_turn(audio: bytes, fmt: str) -> dict:
@@ -69,10 +78,10 @@ def voice_turn(audio: bytes, fmt: str) -> dict:
     heard = transcribe(client, audio, fmt, STT_MODEL)
     question = heard["text"].strip()
     if not question:
-        return {"transcript": "", "answer": "I didn't catch that.", "audio_b64": None,
+        return {"transcript": "", "answer": "I didn't catch that.", "audio_b64": None, "trace": None,
                 "cost": {"stt": heard["cost"], "chat": 0, "tts": 0}, "seconds": {"stt": heard["seconds"]}}
     t1 = time.time()
-    reply, chat_cost = answer(question)
+    reply, chat_cost, trace = answer(question)
     t2 = time.time()
     audio_b64, tts_cost, tts_error = None, 0, None
     try:
@@ -88,7 +97,7 @@ def voice_turn(audio: bytes, fmt: str) -> dict:
     print(f"turn: cost {costs}  total ${total:.5f}", flush=True)
     print(f"turn: stt {seconds['stt']}s  chat {seconds['chat']}s  tts {seconds['tts']}s"
           + (f"  TTS FAILED: {tts_error}  on: {reply[:160]!r}" if tts_error else ""), flush=True)
-    return {"transcript": question, "answer": reply, "audio_b64": audio_b64, "tts_error": tts_error,
+    return {"transcript": question, "answer": reply, "audio_b64": audio_b64, "tts_error": tts_error, "trace": trace,
             "cost": {"stt": heard["cost"], "chat": chat_cost, "tts": tts_cost}, "seconds": seconds,
             "models": {"stt": STT_MODEL, "chat": CHAT_MODEL, "tts": f"{TTS_MODEL} / {TTS_VOICE}"}}
 
@@ -112,9 +121,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self.reply(415, {"error": f"unsupported audio type {ctype!r}; send one of {sorted(FORMATS)}"})
                 return self.reply(200, voice_turn(body, fmt))
             if self.path == "/api/ask":
-                reply, cost = answer(body.decode()[:2000])
+                reply, cost, trace = answer(body.decode()[:2000])
                 return self.reply(200, {"transcript": body.decode()[:2000], "answer": reply, "audio_b64": None,
-                                        "cost": {"stt": 0, "chat": cost, "tts": 0}})
+                                        "cost": {"stt": 0, "chat": cost, "tts": 0}, "trace": trace})
             self.reply(404, {"error": "not found"})
         except Exception as e:  # noqa: BLE001  (the provider's message goes back, never the key)
             traceback.print_exc()
