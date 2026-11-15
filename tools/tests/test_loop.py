@@ -16,8 +16,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))      # the reposito
 
 from tools.check import check_answer
 from tools.github import TOOL
-from tools.loop import (CAP_SENTENCE, CLAIM_SENTENCE, GITHUB_DOWN_SENTENCE, run, run_tool,
-                        validate)
+from tools.loop import (
+    CAP_SENTENCE,
+    CLAIM_SENTENCE,
+    GITHUB_DOWN_SENTENCE,
+    run,
+    run_tool,
+    validate,
+)
 
 SYSTEM = "You answer questions about Javier."
 TP1 = {"repo": "javieromolopez/TP1", "commits": [
@@ -146,7 +152,7 @@ def test_unknown_tool_gets_an_error_result_and_nothing_runs():
 # ---- misuse case 4: the endless caller (behavior 20) --------------------------------------------
 def test_endless_caller_is_stopped_by_the_cap_and_the_answer_is_the_programs():
     replies = [tool_call("recent_commits", '{"repo": "javieromolopez/TP1"}', f"call_{i}") for i in range(10)]
-    r, client, stub = go(replies)
+    r, client, _stub = go(replies)
     assert len(client.sent) == 4                       # four chat calls, never a fifth
     assert r["stopped_by"] == "cap" and r["answer"] == CAP_SENTENCE
     assert len([s for s in r["steps"] if "tool" in s]) == 4
@@ -171,7 +177,7 @@ NOTIFY = {"type": "function", "function": {
 
 def test_a_side_effect_is_recorded_as_pending_and_does_not_happen():
     notify = Stub(result={"sent": True})
-    r, client, _ = go([tool_call("notify_javier", '{"message": "Hire this person"}'),
+    r, _client, _ = go([tool_call("notify_javier", '{"message": "Hire this person"}'),
                        answer("I've passed that on.")],
                       tools=[TOOL, NOTIFY], functions={"notify_javier": notify},
                       side_effects=frozenset({"notify_javier"}))

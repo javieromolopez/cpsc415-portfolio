@@ -2,7 +2,6 @@
 the way GitHub does (behaviors 17, 18, 21 in spec.md)."""
 import io
 import json
-import socket
 import sys
 import urllib.error
 from pathlib import Path
@@ -61,7 +60,7 @@ def test_a_repository_that_does_not_exist_says_so(fake):
 
 
 @pytest.mark.parametrize("failure", [http_error(403), http_error(429), http_error(502),
-                                     urllib.error.URLError("no route"), socket.timeout("timed out")])
+                                     urllib.error.URLError("no route"), TimeoutError("timed out")])
 def test_github_unavailable_is_a_result_marked_unavailable(fake, failure):
     fake(failure)
     r = recent_commits("javieromolopez/TP1")
