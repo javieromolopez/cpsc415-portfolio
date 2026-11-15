@@ -38,7 +38,7 @@ What the table does not show:
 ### Totals
 - **Cost per question with a tool call:** **$0.00053** on average (6 questions, $0.000145 to $0.000883).
 - **Cost per question without a tool call:** **$0.00023** on average (4 questions, $0.000209 to $0.000247).
-- **Most steps any question took:** **2** in the eval, and 3 in the development run above. The cap of 4 was never reached by a real model.
+- **Most steps any question took:** **2** in the eval, and 3 in the development run above. The step cap of 4 was never reached by a real model. The limit of 4 tool calls per question was reached once, by hand (see *A real model hits the tool-call limit*).
 
 ## Misuse cases
 
@@ -47,9 +47,28 @@ What the table does not show:
 | Single shot (the result goes back as a `tool` message with the right `tool_call_id`) | `test_single_shot_result_goes_back_as_a_tool_message_with_the_right_id`, `test_the_schema_is_sent_with_every_request` | Yes, the normal case: question 1 on both models, `recent_commits({"repo": "javieromolopez/TP1"})`, then the answer in step 2. |
 | Bad arguments (an error result, the loop continues, and the corrected call runs) | `test_bad_arguments_get_an_error_result_and_the_loop_continues`, plus the JSON, count, type, and owner edge tests | No. Every real call had valid arguments in the full `javieromolopez/<name>` form; the system prompt's "written exactly as it appears there" was enough. |
 | Unknown tool (an error result, nothing runs) | `test_unknown_tool_gets_an_error_result_and_nothing_runs` | No. |
-| Endless caller (stopped by the cap; the answer is the program's) | `test_endless_caller_is_stopped_by_the_cap_and_the_answer_is_the_programs`, `test_one_reply_with_six_calls_runs_only_four` | Not in the eval. The closest was the development run: minimax-m3 repeated the TP1 call with `count: 10` and then answered in step 3. |
+| Endless caller (stopped by the cap; the answer is the program's) | `test_endless_caller_is_stopped_by_the_cap_and_the_answer_is_the_programs`, `test_one_reply_with_six_calls_runs_only_four` | Not in the eval, but **yes, by hand on November 15** (below): minimax-m3 asked for five repositories in one reply, and the limit of 4 stopped the fifth. Also in the development run: minimax-m3 repeated the TP1 call with `count: 10` and then answered in step 3. |
 | Side effect held (recorded as pending, never run) | `test_a_side_effect_is_recorded_as_pending_and_does_not_happen` (a test-only `notify_javier` tool) | Not applicable: `recent_commits` is read-only and no side-effect tool ships. |
 | Unsupported claim (flagged, and the visitor gets the program's sentence) | `test_an_answer_naming_a_sha_and_date_the_tool_never_returned_is_replaced`, `test_check_flags_a_commit_claim_when_no_commits_came_back`, `test_check_accepts_what_the_tool_returned` | No answer was flagged. Question 4 on minimax-m3 is a misleading answer the check let through (below). |
+
+### A real model hits the tool-call limit (voice, November 15)
+
+I tested the finished chatbot on the voice page (`python voice/server.py`, `http://localhost:8000`), on minimax-m3. Whisper transcribed my question as "What has Javier been working on? Lately, Yeah." The trace the page showed:
+
+```text
+Tools (stopped by answer):
+  recent_commits({"repo":"javieromolopez/TP1"}) -> 5 commits
+  recent_commits({"repo":"javieromolopez/cpsc415-week05"}) -> 5 commits
+  recent_commits({"repo":"javieromolopez/cpsc415-week04"}) -> 5 commits
+  recent_commits({"count":5,"repo":"javieromolopez/cpsc415-week03"}) -> 5 commits
+  recent_commits({"count":5,"repo":"javieromolopez/cpsc415-week02"}) -> error: tool call limit reached (4 per question); answer from the results you have
+```
+
+- **The limit did its job.** All five calls came in one reply, so the step cap alone (which counts chat calls) would have let all five reach GitHub. The fifth was refused in code, and the model answered from the four results in the next step.
+- **This is the gap my second plan question found.** The limit came from that question; the eval never triggered it, but a vague question on a real model did.
+- **The claim check passed, correctly.** The answer named no commit ID or date, and what it described matches the four results.
+- **One sentence was muddled anyway.** The answer included "The receipts aside, these are all model-backed tools…", but the receipt reader is model-backed too. No rule here can catch that (see below).
+- **Cost:** chat **$0.0022**, the most of any question so far but still under the 1-cent ceiling. Speech $0.0099, because the answer was three long sentences. Transcription $0.00002. **Total $0.0122** for the turn, in 16 seconds (6.7 + 7.7 + 1.6).
 
 ## What the check cannot catch
 
@@ -67,7 +86,7 @@ What would catch these:
 ## The cost of a tool
 
 - **With a tool call:** $0.00053 per question on average, and $0.00128 for the worst question I saw (3 steps). **Without one:** $0.00023. A question that uses the tool costs about **2.3 times** as much, because the result has to go back to the model in a second chat call carrying the whole prompt again.
-- **Against the ceiling:** the worst question used about an eighth of the 1-cent ceiling. At the 4-step cap, a question costs at most four chat calls, about $0.002–0.004 on these models, still under the ceiling.
+- **Against the ceiling:** the worst eval question used about an eighth of the 1-cent ceiling. The worst question overall was the voice test with four tool calls: $0.0022 of chat, about a fifth of the ceiling. At the 4-step cap, a question costs at most four chat calls, about $0.002–0.004 on these models, still under the ceiling.
 - **What it means for hosting:** a voice turn was about $0.005 in Week 7, almost all of it the speech. The tool adds about $0.0003 to the chat part, roughly 6% of a voice turn, and doubles the cost of a typed turn (still well under a tenth of a cent). For the hosting decision before November 30, the per-turn figure is about **$0.0006 typed with a tool, and $0.005–0.006 spoken**. MiMo was cheaper on every question with a tool ($0.00015–0.00045 against $0.0006–0.0009) but took 20 seconds on question 4. GitHub costs nothing, but allows 60 requests an hour per server address without a token. A hosted chatbot that gets more traffic needs `GITHUB_TOKEN` (5,000 an hour) or a short cache.
 
 ## Linter
